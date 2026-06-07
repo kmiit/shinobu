@@ -7,6 +7,7 @@ pub enum EventType {
     PluginUnloaded,
     Command,
     Message,
+    MessageDelete,
     Other(String),
 }
 
@@ -44,12 +45,23 @@ pub enum FileSource {
     Id(String),
 }
 
+/// Text formatting mode for platforms that support parsed markup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TextFormat {
+    Markdown,
+    MarkdownV2,
+    Html,
+}
+
 /// A single content item within a message.
 ///
 /// A message can contain multiple content items (text + image + file, etc.).
 #[derive(Debug, Clone)]
 pub enum ContentItem {
-    Text(String),
+    Text {
+        text: String,
+        format: Option<TextFormat>,
+    },
     Image {
         source: ImageSource,
         /// Optional platform-assigned file ID.
@@ -63,10 +75,25 @@ pub enum ContentItem {
         file_id: Option<String>,
     },
     /// Platform-specific custom content type.
-    Other {
-        kind: String,
-        data: String,
-    },
+    Other { kind: String, data: String },
+}
+
+impl ContentItem {
+    /// Build a plain text content item.
+    pub fn text(text: impl Into<String>) -> Self {
+        Self::Text {
+            text: text.into(),
+            format: None,
+        }
+    }
+
+    /// Build a formatted text content item.
+    pub fn formatted_text(text: impl Into<String>, format: TextFormat) -> Self {
+        Self::Text {
+            text: text.into(),
+            format: Some(format),
+        }
+    }
 }
 
 /// Chat context type.
@@ -102,12 +129,12 @@ pub struct Message {
 }
 
 impl Message {
-    /// Concatenate all [`ContentItem::Text`] items into a single string.
+    /// Concatenate all text content items into a single string.
     pub fn text(&self) -> String {
         self.content
             .iter()
             .filter_map(|c| match c {
-                ContentItem::Text(s) => Some(s.as_str()),
+                ContentItem::Text { text, .. } => Some(text.as_str()),
                 _ => None,
             })
             .collect::<Vec<_>>()
@@ -118,7 +145,7 @@ impl Message {
     pub fn has_text(&self) -> bool {
         self.content
             .iter()
-            .any(|c| matches!(c, ContentItem::Text(_)))
+            .any(|c| matches!(c, ContentItem::Text { .. }))
     }
 }
 
@@ -131,7 +158,7 @@ pub struct Event {
     pub data: String,
     /// `Some` iff `event_type == EventType::Command`.
     pub command: Option<Command>,
-    /// `Some` iff `event_type == EventType::Message`.
+    /// `Some` iff this event carries message-shaped data.
     pub message: Option<Message>,
     /// Sender plugin name. `Some` indicates the sender expects a response.
     pub sender: Option<String>,
@@ -171,7 +198,32 @@ impl Event {
             message: Some(Message {
                 id: None,
                 reply_to: None,
-                content: vec![ContentItem::Text(text.into())],
+                content: vec![ContentItem::text(text)],
+                from: None,
+                to: None,
+                at: Vec::new(),
+                chat_type: None,
+            }),
+            sender: None,
+            receiver: None,
+        }
+    }
+
+    /// Build an [`EventType::Message`] event with formatted text content.
+    pub fn formatted_message(
+        source: impl Into<String>,
+        text: impl Into<String>,
+        format: TextFormat,
+    ) -> Self {
+        Self {
+            event_type: EventType::Message,
+            source: source.into(),
+            data: String::new(),
+            command: None,
+            message: Some(Message {
+                id: None,
+                reply_to: None,
+                content: vec![ContentItem::formatted_text(text, format)],
                 from: None,
                 to: None,
                 at: Vec::new(),
@@ -201,6 +253,31 @@ impl Event {
                     file_name,
                     file_id: None,
                 }],
+                from: None,
+                to: None,
+                at: Vec::new(),
+                chat_type: None,
+            }),
+            sender: None,
+            receiver: None,
+        }
+    }
+
+    /// Build an [`EventType::MessageDelete`] event.
+    ///
+    /// The target message id is carried in [`Message::id`]. Adapters may accept
+    /// either their native platform id or an id previously assigned to an
+    /// outgoing framework message.
+    pub fn message_delete(source: impl Into<String>, message_id: impl Into<String>) -> Self {
+        Self {
+            event_type: EventType::MessageDelete,
+            source: source.into(),
+            data: String::new(),
+            command: None,
+            message: Some(Message {
+                id: Some(message_id.into()),
+                reply_to: None,
+                content: Vec::new(),
                 from: None,
                 to: None,
                 at: Vec::new(),

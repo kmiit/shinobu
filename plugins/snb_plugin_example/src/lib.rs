@@ -133,7 +133,7 @@ fn log_hook(event: &mut Event) -> anyhow::Result<()> {
     if let Some(msg) = event.message.as_mut()
         && msg.text() == "hook"
     {
-        msg.content = vec![snb_core::event::ContentItem::Text("hooked".to_string())];
+        msg.content = vec![snb_core::event::ContentItem::text("hooked")];
     }
     Ok(())
 }

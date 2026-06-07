@@ -66,7 +66,7 @@ impl Adapter for StdinAdapter {
         };
         for item in &message.content {
             match item {
-                ContentItem::Text(text) => println!("{text}"),
+                ContentItem::Text { text, .. } => println!("{text}"),
                 ContentItem::File {
                     source,
                     file_name,
