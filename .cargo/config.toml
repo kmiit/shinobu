@@ -1,0 +1,6 @@
+[alias]
+xtask = "run -p xtask --"
+build-example = "xtask build-example"
+build-plugins = "xtask build-plugins"
+build-all = "xtask build-all"
+list-plugins = "xtask list-plugins"
