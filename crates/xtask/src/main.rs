@@ -62,7 +62,7 @@ fn build_example(root: &Path, extra_args: &[OsString]) -> Result<(), String> {
                 manifest.display()
             ));
         }
-        cargo_build(root, &manifest, extra_args)?;
+        cargo_build_lib(root, &manifest, extra_args)?;
     }
     Ok(())
 }
@@ -86,7 +86,7 @@ fn build_plugins(root: &Path, extra_args: &[OsString]) -> Result<(), String> {
     }
 
     for manifest in manifests {
-        cargo_build(root, &manifest, extra_args)?;
+        cargo_build_lib(root, &manifest, extra_args)?;
     }
     Ok(())
 }
@@ -101,9 +101,13 @@ fn build_all(root: &Path, extra_args: &[OsString]) -> Result<(), String> {
     Ok(())
 }
 
-fn build_named_plugin(root: &Path, plugin: &OsString, extra_args: &[OsString]) -> Result<(), String> {
+fn build_named_plugin(
+    root: &Path,
+    plugin: &OsString,
+    extra_args: &[OsString],
+) -> Result<(), String> {
     let manifest = resolve_plugin_manifest(root, plugin)?;
-    cargo_build(root, &manifest, extra_args)
+    cargo_build_lib(root, &manifest, extra_args)
 }
 
 fn list_plugins(root: &Path) -> Result<(), String> {
@@ -194,10 +198,6 @@ fn discover_plugin_manifests(root: &Path) -> Result<Vec<PathBuf>, String> {
 
     manifests.sort();
     Ok(manifests)
-}
-
-fn cargo_build(root: &Path, manifest: &Path, extra_args: &[OsString]) -> Result<(), String> {
-    cargo_build_plugin(root, manifest, extra_args, false)
 }
 
 fn cargo_build_lib(root: &Path, manifest: &Path, extra_args: &[OsString]) -> Result<(), String> {
