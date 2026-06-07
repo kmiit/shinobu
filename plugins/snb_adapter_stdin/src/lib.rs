@@ -75,6 +75,7 @@ impl Adapter for StdinAdapter {
                     let source = match source {
                         FileSource::Url(url) => format!("url={url}"),
                         FileSource::Path(path) => format!("path={path}"),
+                        FileSource::Id(id) => format!("id={id}"),
                     };
                     println!(
                         "[file] {source} name={} id={}",

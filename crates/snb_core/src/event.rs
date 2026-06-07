@@ -25,6 +25,10 @@ pub struct Command {
 pub enum ImageSource {
     /// Remote URL.
     Url(String),
+    /// Local image path.
+    Path(String),
+    /// Platform-assigned file ID.
+    Id(String),
     /// Base64-encoded image data.
     Base64(String),
 }
@@ -36,6 +40,8 @@ pub enum FileSource {
     Url(String),
     /// Local file path.
     Path(String),
+    /// Platform-assigned file ID.
+    Id(String),
 }
 
 /// A single content item within a message.
