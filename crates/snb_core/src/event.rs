@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 /// Discriminant for [`Event`]. The structured payload (parsed command,
 /// message text, etc.) lives in the corresponding `Option` field on the
 /// event itself.
@@ -7,6 +9,7 @@ pub enum EventType {
     PluginUnloaded,
     Command,
     Message,
+    MessageSent,
     MessageDelete,
     Other(String),
 }
@@ -126,6 +129,8 @@ pub struct Message {
     pub at: Vec<String>,
     /// Chat context type.
     pub chat_type: Option<ChatType>,
+    /// Delete this outgoing message after the given duration, if supported by the adapter.
+    pub delete_after: Option<Duration>,
 }
 
 impl Message {
@@ -203,6 +208,7 @@ impl Event {
                 to: None,
                 at: Vec::new(),
                 chat_type: None,
+                delete_after: None,
             }),
             sender: None,
             receiver: None,
@@ -228,6 +234,7 @@ impl Event {
                 to: None,
                 at: Vec::new(),
                 chat_type: None,
+                delete_after: None,
             }),
             sender: None,
             receiver: None,
@@ -257,6 +264,36 @@ impl Event {
                 to: None,
                 at: Vec::new(),
                 chat_type: None,
+                delete_after: None,
+            }),
+            sender: None,
+            receiver: None,
+        }
+    }
+
+    /// Build an [`EventType::MessageSent`] event.
+    ///
+    /// `platform_message_id` is the native adapter message id. `request_id`, when
+    /// present, is the outgoing framework message id supplied by the sender.
+    pub fn message_sent(
+        source: impl Into<String>,
+        platform_message_id: impl Into<String>,
+        request_id: Option<String>,
+    ) -> Self {
+        Self {
+            event_type: EventType::MessageSent,
+            source: source.into(),
+            data: String::new(),
+            command: None,
+            message: Some(Message {
+                id: Some(platform_message_id.into()),
+                reply_to: request_id,
+                content: Vec::new(),
+                from: None,
+                to: None,
+                at: Vec::new(),
+                chat_type: None,
+                delete_after: None,
             }),
             sender: None,
             receiver: None,
@@ -265,9 +302,8 @@ impl Event {
 
     /// Build an [`EventType::MessageDelete`] event.
     ///
-    /// The target message id is carried in [`Message::id`]. Adapters may accept
-    /// either their native platform id or an id previously assigned to an
-    /// outgoing framework message.
+    /// The target message id is carried in [`Message::id`]. Adapters should treat it
+    /// as their native platform message id.
     pub fn message_delete(source: impl Into<String>, message_id: impl Into<String>) -> Self {
         Self {
             event_type: EventType::MessageDelete,
@@ -282,6 +318,7 @@ impl Event {
                 to: None,
                 at: Vec::new(),
                 chat_type: None,
+                delete_after: None,
             }),
             sender: None,
             receiver: None,
