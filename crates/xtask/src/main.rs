@@ -48,14 +48,22 @@ fn main() {
         print_usage_and_exit();
     };
 
+    // Handle help flag: explicit help prints to stdout and exits success.
+    let command_str = command.to_string_lossy();
+    if command_str == "--help" || command_str == "-h" || command_str == "help" {
+        println!("{}", usage());
+        process::exit(0);
+    }
+
     let extra_args: Vec<OsString> = args.collect();
     let root = workspace_root();
 
-    let result = match command.to_string_lossy().as_ref() {
+    let result = match command_str.as_ref() {
         "build-example" => build_example(&root, &extra_args),
         "build-plugins" => build_plugins(&root, &extra_args),
         "build-all" => build_all(&root, &extra_args),
-        "list-plugins" => list_plugins(&root),
+        "list-plugins" | "ls" => list_plugins(&root),
+        "clean" => clean_generated(&root),
         "build-plugin" => {
             let Some(plugin) = extra_args.first() else {
                 eprintln!("usage: cargo xtask build-plugin <plugin-dir> [cargo build args...]");
@@ -64,12 +72,13 @@ fn main() {
             build_named_plugin(&root, plugin, &extra_args[1..])
         }
         _ => {
+            eprintln!("unknown command: {command_str}\n");
             print_usage_and_exit();
         }
     };
 
     if let Err(error) = result {
-        eprintln!("{error}");
+        eprintln!("\x1b[31merror:\x1b[0m {error}");
         process::exit(1);
     }
 }
@@ -116,6 +125,22 @@ fn build_plugins(root: &Path, extra_args: &[OsString]) -> Result<(), String> {
     for plugin in plugins {
         cargo_build_lib(root, &plugin, extra_args)?;
     }
+    Ok(())
+}
+
+fn clean_generated(root: &Path) -> Result<(), String> {
+    let xtask_dir = root.join("target").join("xtask-snb");
+
+    if !xtask_dir.exists() {
+        println!("Nothing to clean (xtask-snb directory does not exist)");
+        return Ok(());
+    }
+
+    println!("Cleaning generated manifests from {}", xtask_dir.display());
+    fs::remove_dir_all(&xtask_dir)
+        .map_err(|error| format!("failed to remove {}: {error}", xtask_dir.display()))?;
+
+    println!("\x1b[32mCleaned:\x1b[0m {}", xtask_dir.display());
     Ok(())
 }
 
@@ -175,11 +200,19 @@ fn list_plugins(root: &Path) -> Result<(), String> {
 
     for plugin in plugins {
         let is_example = example_plugins.contains(plugin.name.as_str());
-        let relative_path = plugin
-            .manifest
+
+        // Show the real on-disk source, not the generated manifest. For an
+        // snb.toml-based plugin `plugin.manifest` points at the generated
+        // target/xtask-snb/.../Cargo.toml, which is misleading and doesn't
+        // exist until the plugin is built.
+        let source_path = match &plugin.kind {
+            PluginBuildKind::Cargo => plugin.manifest.clone(),
+            PluginBuildKind::SnbSource(build) => build.plugin_dir.join(SNB_MANIFEST),
+        };
+        let relative_path = source_path
             .strip_prefix(root)
             .map(|p| p.display().to_string())
-            .unwrap_or_else(|_| plugin.manifest.display().to_string());
+            .unwrap_or_else(|_| source_path.display().to_string());
 
         if is_example {
             example_list.push((plugin.name, relative_path));
@@ -449,10 +482,64 @@ fn resolve_plugin(root: &Path, plugin: &OsString) -> Result<PluginBuild, String>
 }
 
 fn plugin_name_matches(dir_name: &str, requested: &str) -> bool {
-    dir_name == requested
-        || dir_name.strip_prefix("snb_adapter_") == Some(requested)
-        || dir_name.strip_prefix("snb_database_") == Some(requested)
-        || dir_name.strip_prefix("snb_plugin_") == Some(requested)
+    // Exact match
+    if dir_name == requested {
+        return true;
+    }
+
+    // Strip common prefixes from dir_name
+    let prefixes = ["snb_adapter_", "snb_database_", "snb_plugin_", "snb_"];
+    for prefix in prefixes {
+        if let Some(suffix) = dir_name.strip_prefix(prefix) {
+            if suffix == requested {
+                return true;
+            }
+        }
+    }
+
+    // Normalize names: convert hyphens to underscores and compare
+    let normalized_dir = dir_name.replace('-', "_");
+    let normalized_req = requested.replace('-', "_");
+
+    if normalized_dir == normalized_req {
+        return true;
+    }
+
+    // Try prefix matching with normalized names
+    for prefix in prefixes {
+        if let Some(suffix) = normalized_dir.strip_prefix(prefix) {
+            if suffix == normalized_req {
+                return true;
+            }
+        }
+        if let Some(suffix) = normalized_req.strip_prefix(prefix) {
+            if normalized_dir == suffix {
+                return true;
+            }
+        }
+    }
+
+    // Strip common suffixes (like -rs) and try again
+    let suffixes = ["_rs", "-rs"];
+    for suffix in suffixes {
+        if let Some(base) = dir_name.strip_suffix(suffix) {
+            if base == requested {
+                return true;
+            }
+            // Also try with normalized version
+            let normalized_base = base.replace('-', "_");
+            if normalized_base == normalized_req {
+                return true;
+            }
+        }
+        if let Some(base) = requested.strip_suffix(suffix) {
+            if dir_name == base {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 fn discover_plugins(root: &Path) -> Result<Vec<PluginBuild>, String> {
@@ -718,14 +805,35 @@ fn toml_inline_value(value: &toml::Value) -> String {
     }
 }
 
+fn usage() -> &'static str {
+    "\x1b[1mUSAGE:\x1b[0m
+  cargo xtask <COMMAND> [OPTIONS]
+
+\x1b[1mCOMMANDS:\x1b[0m
+  \x1b[32mbuild-example\x1b[0m          Build example plugins only
+  \x1b[32mbuild-plugins\x1b[0m          Build non-example plugins only
+  \x1b[32mbuild-all\x1b[0m              Build workspace and all plugins
+  \x1b[32mbuild-plugin\x1b[0m <name>    Build a specific plugin by name
+  \x1b[32mlist-plugins\x1b[0m, \x1b[32mls\x1b[0m      List all available plugins
+  \x1b[32mclean\x1b[0m                  Clean generated plugin manifests
+  \x1b[32mhelp\x1b[0m, \x1b[32m--help\x1b[0m, \x1b[32m-h\x1b[0m     Show this help message
+
+\x1b[1mEXAMPLES:\x1b[0m
+  cargo xtask list-plugins
+  cargo xtask build-plugin payload_extract_bot
+  cargo xtask build-plugin tg --release
+  cargo xtask build-all
+  cargo xtask clean
+
+\x1b[1mNOTE:\x1b[0m
+  Plugin names support fuzzy matching:
+  - Short names: 'tg' matches 'snb_adapter_tg'
+  - With/without prefix: 'adapter_tg' or 'snb_adapter_tg'
+  - With/without suffix: 'payload_extract_bot' matches 'payload_extract_bot-rs'
+  - Hyphen/underscore: 'payload-extract-bot' matches 'payload_extract_bot'"
+}
+
 fn print_usage_and_exit() -> ! {
-    eprintln!(
-        "usage:
-  cargo xtask build-example [cargo build args...]
-  cargo xtask build-plugins [cargo build args...]
-  cargo xtask build-all [cargo build args...]
-  cargo xtask build-plugin <plugin-dir> [cargo build args...]
-  cargo xtask list-plugins"
-    );
+    eprintln!("{}", usage());
     process::exit(2);
 }
