@@ -30,6 +30,13 @@ pub fn set_bot(ctx: Arc<dyn BotContext>) {
     *BOT.write().unwrap() = Some(ctx);
 }
 
+/// Check if the global bot instance has been set.
+///
+/// Returns `true` if [`set_bot`] has been called in the current compilation unit.
+pub fn bot_is_set() -> bool {
+    BOT.read().unwrap().is_some()
+}
+
 /// Returns the global bot instance.
 ///
 /// # Panics
