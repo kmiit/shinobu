@@ -427,7 +427,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
 name = "snb_adapter_stdin"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "log",
@@ -437,7 +437,7 @@ dependencies = [
 
 [[package]]
 name = "snb_cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "log",
  "snb_core",
@@ -448,7 +448,7 @@ dependencies = [
 
 [[package]]
 name = "snb_core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "inventory",
@@ -459,7 +459,7 @@ dependencies = [
 
 [[package]]
 name = "snb_database_sqlite"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "log",
@@ -470,7 +470,7 @@ dependencies = [
 
 [[package]]
 name = "snb_macros"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -479,7 +479,7 @@ dependencies = [
 
 [[package]]
 name = "snb_plugin_example"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "log",
@@ -490,7 +490,7 @@ dependencies = [
 
 [[package]]
 name = "snb_runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "libloading",
@@ -859,7 +859,10 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.1.0"
+version = "0.1.1"
+dependencies = [
+ "toml",
+]
 
 [[package]]
 name = "zmij"
