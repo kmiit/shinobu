@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use snb_core::bot::BotInfo;
@@ -41,9 +41,14 @@ fn is_plugin_library(name: &str) -> bool {
 
 #[tokio::main]
 async fn main() {
-    let cwd = std::env::current_dir().unwrap();
-    let config_dir = cwd.join("configs");
-    let data_root = cwd.join("data");
+    let exe_dir = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let runtime_root = resolve_runtime_root(&std::env::current_dir().unwrap(), &exe_dir);
+    let config_dir = runtime_root.join("configs");
+    let data_root = runtime_root.join("data");
     let log_level = load_log_level(&config_dir);
 
     // Initialize env_logger
@@ -71,12 +76,7 @@ async fn main() {
     // A library found in (1) shadows a same-named file in (2); duplicate plugin
     // or command names across *different* files are refused by the loader.
     let loader = PluginLoader::new(bot.clone());
-    let exe_dir = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .to_path_buf();
-    let plugins_dir = cwd.join("plugins");
+    let plugins_dir = runtime_root.join("plugins");
 
     let mut seen_files = std::collections::HashSet::new();
     for dir in [exe_dir, plugins_dir] {
@@ -118,4 +118,104 @@ async fn main() {
         bot.unregister_plugin(&name);
     }
     log::info!("Goodbye.");
+}
+
+fn resolve_runtime_root(current_dir: &Path, exe_dir: &Path) -> PathBuf {
+    find_shinobu_project_root(current_dir)
+        .or_else(|| find_shinobu_project_root(exe_dir))
+        .unwrap_or_else(|| exe_dir.to_path_buf())
+}
+
+fn find_shinobu_project_root(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .find(|candidate| is_shinobu_project_root(candidate))
+        .map(Path::to_path_buf)
+}
+
+fn is_shinobu_project_root(path: &Path) -> bool {
+    path.join("Cargo.toml").is_file()
+        && path
+            .join("crates")
+            .join("snb_cli")
+            .join("Cargo.toml")
+            .is_file()
+        && path
+            .join("crates")
+            .join("snb_core")
+            .join("Cargo.toml")
+            .is_file()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TempDir {
+        path: PathBuf,
+    }
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "shinobu-cli-test-{}-{}",
+                name,
+                std::process::id()
+            ));
+            if path.exists() {
+                std::fs::remove_dir_all(&path).unwrap();
+            }
+            std::fs::create_dir_all(&path).unwrap();
+            Self { path }
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(&self.path).ok();
+        }
+    }
+
+    fn make_project_root(path: &Path) {
+        std::fs::write(path.join("Cargo.toml"), "[workspace]\n").unwrap();
+        std::fs::create_dir_all(path.join("crates").join("snb_cli")).unwrap();
+        std::fs::write(
+            path.join("crates").join("snb_cli").join("Cargo.toml"),
+            "[package]\nname = \"snb_cli\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(path.join("crates").join("snb_core")).unwrap();
+        std::fs::write(
+            path.join("crates").join("snb_core").join("Cargo.toml"),
+            "[package]\nname = \"snb_core\"\n",
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn runtime_root_walks_up_from_plugin_dir_to_project_root() {
+        let temp = TempDir::new("plugin-cwd");
+        make_project_root(&temp.path);
+        let plugin_dir = temp.path.join("plugins").join("snb_adapter_tg");
+        std::fs::create_dir_all(&plugin_dir).unwrap();
+        std::fs::write(
+            plugin_dir.join("Cargo.toml"),
+            "[package]\nname = \"plugin\"\n",
+        )
+        .unwrap();
+        let exe_dir = temp.path.join("target").join("debug");
+
+        assert_eq!(resolve_runtime_root(&plugin_dir, &exe_dir), temp.path);
+    }
+
+    #[test]
+    fn runtime_root_falls_back_to_exe_dir_without_project_root() {
+        let temp = TempDir::new("exe-fallback");
+        let cwd = temp.path.join("elsewhere");
+        let exe_dir = temp.path.join("bin");
+        std::fs::create_dir_all(&cwd).unwrap();
+        std::fs::create_dir_all(&exe_dir).unwrap();
+
+        assert_eq!(resolve_runtime_root(&cwd, &exe_dir), exe_dir);
+    }
 }
