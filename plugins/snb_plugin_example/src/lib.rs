@@ -114,12 +114,13 @@ fn echo_handler(event: &Event) -> anyhow::Result<()> {
     }
 
     log::info!(
-        "[message] text={:?} from={:?} to={:?} at={:?} chat_type={:?} source={}",
+        "[message] text={:?} from={:?} to={:?} at={:?} chat_type={:?} is_admin={} source={}",
         text,
         msg.from,
         msg.to,
         msg.at,
         msg.chat_type,
+        msg.is_admin,
         event.source,
     );
     Ok(())

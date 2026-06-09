@@ -130,6 +130,11 @@ pub struct Message {
     pub at: Vec<String>,
     /// Chat context type.
     pub chat_type: Option<ChatType>,
+    /// Whether the sender is an administrator in this chat/context.
+    ///
+    /// Adapters should set this when the platform exposes administrator
+    /// membership/permission information. It defaults to `false` when unknown.
+    pub is_admin: bool,
     /// Delete this outgoing message after the given duration, if supported by the adapter.
     pub delete_after: Option<Duration>,
 }
@@ -211,6 +216,7 @@ impl Event {
                 to: None,
                 at: Vec::new(),
                 chat_type: None,
+                is_admin: false,
                 delete_after: None,
             }),
             sender: None,
@@ -237,6 +243,7 @@ impl Event {
                 to: None,
                 at: Vec::new(),
                 chat_type: None,
+                is_admin: false,
                 delete_after: None,
             }),
             sender: None,
@@ -267,6 +274,7 @@ impl Event {
                 to: None,
                 at: Vec::new(),
                 chat_type: None,
+                is_admin: false,
                 delete_after: None,
             }),
             sender: None,
@@ -296,6 +304,7 @@ impl Event {
                 to: None,
                 at: Vec::new(),
                 chat_type: None,
+                is_admin: false,
                 delete_after: None,
             }),
             sender: None,
@@ -327,6 +336,7 @@ impl Event {
                 to: None,
                 at: Vec::new(),
                 chat_type: None,
+                is_admin: false,
                 delete_after: None,
             }),
             sender: None,
@@ -352,6 +362,7 @@ impl Event {
                 to: None,
                 at: Vec::new(),
                 chat_type: None,
+                is_admin: false,
                 delete_after: None,
             }),
             sender: None,
@@ -414,6 +425,7 @@ mod tests {
         let msg = event.message.unwrap();
         assert_eq!(msg.text(), "hello world");
         assert!(msg.has_text());
+        assert!(!msg.is_admin);
     }
 
     #[test]
@@ -448,6 +460,7 @@ mod tests {
             to: None,
             at: Vec::new(),
             chat_type: None,
+            is_admin: false,
             delete_after: None,
         };
         assert_eq!(msg.text(), "hello world");

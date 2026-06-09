@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use snb_core::adapter::{Adapter, run_async};
 use snb_core::context::BotContext;
-use snb_core::event::{ContentItem, Event, EventType, FileSource};
+use snb_core::event::{ChatType, ContentItem, Event, EventType, FileSource, Message};
 use snb_macros::plugin;
 
 /// Built-in stdin adapter.
@@ -30,15 +30,38 @@ async fn stdin_reader(bot: Arc<dyn BotContext>) {
             let cmd = parts.next().unwrap_or("");
             let args = parts.next().unwrap_or("").trim_start();
             match cmd {
-                "" => Event::message("stdin", text),
-                "file" => parse_file_message(args).unwrap_or_else(|| Event::message("stdin", text)),
+                "" => Event::message("stdin", text.as_str()),
+                "file" => parse_file_message(args)
+                    .unwrap_or_else(|| Event::message("stdin", text.as_str())),
                 _ => Event::command("stdin", cmd, args),
             }
         } else {
-            Event::message("stdin", text)
+            Event::message("stdin", text.as_str())
         };
-        bot.emit_event(event.with_sender("stdin"));
+        bot.emit_event(with_admin_context(event, &text).with_sender("stdin"));
     }
+}
+
+fn with_admin_context(mut event: Event, text: &str) -> Event {
+    if let Some(message) = event.message.as_mut() {
+        message.from.get_or_insert_with(|| "stdin".to_string());
+        message.to.get_or_insert_with(|| "stdin".to_string());
+        message.chat_type.get_or_insert(ChatType::Private);
+        message.is_admin = true;
+    } else {
+        event.message = Some(Message {
+            id: None,
+            reply_to: None,
+            content: vec![ContentItem::text(text)],
+            from: Some("stdin".to_string()),
+            to: Some("stdin".to_string()),
+            at: Vec::new(),
+            chat_type: Some(ChatType::Private),
+            is_admin: true,
+            delete_after: None,
+        });
+    }
+    event
 }
 
 fn parse_file_message(args: &str) -> Option<Event> {
@@ -115,5 +138,30 @@ impl Adapter for StdinAdapter {
 snb_core::registry::submit! {
     snb_core::registry::AdapterRegistration {
         factory: || Arc::new(StdinAdapter),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stdin_message_defaults_to_admin() {
+        let event = with_admin_context(Event::message("stdin", "hello"), "hello");
+        let message = event.message.unwrap();
+
+        assert_eq!(message.from.as_deref(), Some("stdin"));
+        assert_eq!(message.to.as_deref(), Some("stdin"));
+        assert_eq!(message.chat_type, Some(ChatType::Private));
+        assert!(message.is_admin);
+    }
+
+    #[test]
+    fn stdin_command_carries_admin_message() {
+        let event = with_admin_context(Event::command("stdin", "ping", ""), "/ping");
+        let message = event.message.unwrap();
+
+        assert_eq!(message.text(), "/ping");
+        assert!(message.is_admin);
     }
 }

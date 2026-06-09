@@ -1,7 +1,6 @@
 /target
 /configs/*
 !/configs/bot.toml
-!/configs/test.toml
 /plugins/*
 !/plugins/snb_adapter_stdin
 !/plugins/snb_database_sqlite
